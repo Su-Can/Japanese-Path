@@ -688,12 +688,14 @@
                         <div class="skill">阅读<i style="--v:0%"></i></div>
                         <div class="skill">写作<i style="--v:0%"></i></div>
                     </div>
-                    <h3 style="margin-top:25px">AI 对话设置</h3>
-                    <div class="chatmock">
-                        <div class="bubble ai" id="aiPromptPreview">动态提示词将显示在这里</div>
-                    </div>
-                    <input type="password" id="apiKey" class="input-key" placeholder="输入 LLM API Key (仅保存在本地)" onchange="App.saveApiKey(this.value)">
-                    <div class="notice">学习数据与 API Key 仅存储于当前浏览器本地，保障隐私安全。</div>
+                    <h3 style="margin-top:25px">AI 课程增强设置</h3>
+                    <div class="notice" style="margin-top:0">兼容 OpenAI 格式（/v1/chat/completions）。填好后可让 AI 生成练习题目；不填则使用内置种子题库，离线也能学完 A1。</div>
+                    <input type="password" id="apiKey" class="input-key" placeholder="API Key（必填）" onchange="App.saveAIConfig()">
+                    <input type="text" id="baseUrl" class="input-key" placeholder="Base URL（必填，如 https://api.openai.com/v1）" onchange="App.saveAIConfig()">
+                    <input type="text" id="model" class="input-key" placeholder="Model（默认 gpt-4o-mini）" onchange="App.saveAIConfig()">
+                    <div class="notice">API Key 与配置仅存储于当前浏览器本地，不上传任何服务器。</div>
+                    <button class="secondary" style="width:100%;margin-top:6px" onclick="App.testAI()">测试连接</button>
+                    <div id="aiTestResult" class="notice" style="min-height:16px"></div>
                     <button class="secondary" style="width:100%;margin-top:18px;color:var(--danger)" onclick="App.resetData()">重置本地学习数据</button>
                 </div>
             </section>
@@ -909,7 +911,7 @@
                 ["ん", "n"]
             ],
 
-            state: { xp: 0, streak: 0, lastStudy: "", done: 0, doneLessons: [], currentLessonId: 0, weak: {}, apiKey: "", reviewQueue: {} },
+            state: { xp: 0, streak: 0, lastStudy: "", done: 0, doneLessons: [], currentLessonId: 0, weak: {}, apiKey: "", baseUrl: "", model: "gpt-4o-mini", reviewQueue: {} },
             ci: 0,
             qi: 0,
             score: 0,
@@ -935,9 +937,10 @@
                 this.buildKana();
                 this.update();
                 if (document.getElementById("apiKey")) document.getElementById("apiKey").value = this.state.apiKey || "";
+                if (document.getElementById("baseUrl")) document.getElementById("baseUrl").value = this.state.baseUrl || "";
+                if (document.getElementById("model")) document.getElementById("model").value = this.state.model || "gpt-4o-mini";
                 this.updateReviewList();
                 this.updateSkillBars();
-                this.updateAIPromptPreview();
             },
 
             save() {
@@ -945,7 +948,6 @@
                 this.update();
                 this.updateReviewList();
                 this.updateSkillBars();
-                this.updateAIPromptPreview();
             },
 
             update() {
@@ -1240,32 +1242,70 @@
                 }
             },
 
-            buildDynamicPrompt() {
-                const level = this.state.done < 4 ? 'A1（入门）' : 'A1（进阶）';
-                const weakWords = Object.keys(this.state.weak)
-                    .sort((a, b) => this.state.weak[b].count - this.state.weak[a].count)
-                    .slice(0, 5);
-                let prompt = `你是一名日语导师。我的当前水平是 ${level}。`;
-                if (weakWords.length > 0) {
-                    prompt += ` 我最近经常搞混以下词汇或表达：「${weakWords.join('、')}」。请在对话中穿插这些词汇帮我巩固，如果我说错了请温柔纠正。`;
-                } else {
-                    prompt += ` 请用最简单的日语问候语和自我介绍与我进行日常对话。`;
-                }
-                prompt += ` 回答时请附带中文翻译。保持鼓励性语气。`;
-                return prompt;
-            },
 
-            updateAIPromptPreview() {
-                const preview = document.getElementById("aiPromptPreview");
-                if (preview) {
-                    preview.textContent = "🧠 动态提示词：\n" + this.buildDynamicPrompt();
-                }
-            },
 
-            saveApiKey(val) {
-                this.state.apiKey = val.trim();
+
+            saveAIConfig() {
+                const keyEl = document.getElementById("apiKey");
+                const urlEl = document.getElementById("baseUrl");
+                const modelEl = document.getElementById("model");
+                this.state.apiKey = (keyEl && keyEl.value || "").trim();
+                this.state.baseUrl = (urlEl && urlEl.value || "").trim().replace(/\/+$/, "");
+                this.state.model = (modelEl && modelEl.value || "").trim() || "gpt-4o-mini";
                 this.save();
             },
+
+            aiEnabled() {
+                return !!(this.state.apiKey && this.state.baseUrl);
+            },
+
+            // 兼容 OpenAI 格式的 chat completion 调用
+            async callAI(messages, opts) {
+                opts = opts || {};
+                if (!this.aiEnabled()) throw new Error("未配置 API Key 或 Base URL");
+                const url = this.state.baseUrl.replace(/\/v1\/?$/, "") + "/v1/chat/completions";
+                const body = {
+                    model: this.state.model || "gpt-4o-mini",
+                    messages: messages,
+                    temperature: opts.temperature != null ? opts.temperature : 0.7
+                };
+                if (opts.json) body.response_format = { type: "json_object" };
+                const res = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + this.state.apiKey
+                    },
+                    body: JSON.stringify(body)
+                });
+                if (!res.ok) {
+                    let detail = "";
+                    try { detail = (await res.text()).slice(0, 200); } catch (e) {}
+                    throw new Error("HTTP " + res.status + " " + detail);
+                }
+                const data = await res.json();
+                return data.choices && data.choices[0] && data.choices[0].message
+                    ? data.choices[0].message.content : "";
+            },
+
+            async testAI() {
+                const out = document.getElementById("aiTestResult");
+                if (out) out.textContent = "连接中…";
+                if (!this.aiEnabled()) {
+                    if (out) out.textContent = "⚠️ 请先填写 API Key 和 Base URL";
+                    return;
+                }
+                try {
+                    const reply = await this.callAI(
+                        [{ role: "user", content: "只用一句话回复：连接成功。" }],
+                        { temperature: 0.3 }
+                    );
+                    if (out) out.textContent = "✅ 连接成功：" + reply.trim().slice(0, 60);
+                } catch (e) {
+                    if (out) out.textContent = "❌ 连接失败：" + e.message;
+                }
+            },
+
 
             resetData() {
                 if (confirm("确定要清空本机所有学习记录与配置吗？")) {
