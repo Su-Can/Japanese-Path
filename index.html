@@ -637,26 +637,7 @@
                 <div class="goal" onclick="App.startLesson(0)"><div class="goalicon">💬</div><div><b>我可以进行简单问候</b><span>问候、告别、谢谢 · 约 8 分钟</span></div><div>›</div></div>
 
                 <div class="sectiontitle">A1 学习路径</div>
-                <div class="path">
-                    <div class="unit">
-                        <div class="unittop"><div><h3>01 · 问候与自我介绍</h3><p>完成最基本的第一次交流</p></div><span class="tag done" id="u1tag">进行中</span></div>
-                        <div class="skills" id="skillsUnit1">
-                            <div class="skill">听力<i style="--v:0%"></i></div>
-                            <div class="skill">口语<i style="--v:0%"></i></div>
-                            <div class="skill">阅读<i style="--v:0%"></i></div>
-                            <div class="skill">写作<i style="--v:0%"></i></div>
-                        </div>
-                        <div class="lessons">
-                            <button class="lesson current" onclick="App.startLesson(0)"><strong>① 基础问候</strong><small>こんにちは / ありがとう</small></button>
-                            <button class="lesson" onclick="App.startLesson(1)"><strong>② 自我介绍</strong><small>わたしは…です</small></button>
-                            <button class="lesson" onclick="App.startLesson(2)"><strong>③ 礼貌表达</strong><small>すみません / ください</small></button>
-                            <button class="lesson" onclick="App.startLesson(3)"><strong>④ 单元复习</strong><small>综合练习</small></button>
-                        </div>
-                    </div>
-                    <div class="unit"><div class="unittop"><div><h3>02 · 日常生活</h3><p>时间、地点、喜好与简单描述</p></div><span class="tag">即将解锁</span></div><div class="skills"><div class="skill">听力<i style="--v:0%"></i></div><div class="skill">口语<i style="--v:0%"></i></div><div class="skill">阅读<i style="--v:0%"></i></div><div class="skill">写作<i style="--v:0%"></i></div></div></div>
-                    <div class="unit"><div class="unittop"><div><h3>03 · 餐厅与购物</h3><p>在熟悉场景中完成简单任务</p></div><span class="tag">即将解锁</span></div></div>
-                    <div class="unit"><div class="unittop"><div><h3>04 · 交通与出行</h3><p>车站、方向、时间与简单请求</p></div><span class="tag">即将解锁</span></div></div>
-                </div>
+                <div class="path" id="pathContainer"></div>
             </section>
 
             <section id="lesson" class="screen">
@@ -731,40 +712,153 @@
     <script>
         const App = {
             courses: [
-                { title: "01 · 基础问候", qs: [
-                        ["こんにちは", "konnichiwa", "“こんにちは”是什么意思？", ["你好", "谢谢", "再见", "对不起"], 0],
-                        ["おはようございます", "ohayou gozaimasu", "早上见面时最合适的是：", ["こんばんは", "おはようございます", "またね",
-                            "ありがとう"
-                        ], 1],
-                        ["こんばんは", "konbanwa", "“こんばんは”是什么意思？", ["早上好", "谢谢", "晚上好", "请"], 2],
-                        ["またね", "mata ne", "“またね”是什么意思？", ["再见/下次见", "你好", "对不起", "谢谢"], 0],
-                        ["ありがとう", "arigatou", "“ありがとう”是什么意思？", ["请给我", "你好", "谢谢", "晚安"], 2]
-                    ] },
-                { title: "02 · 自我介绍", qs: [
+                { title: "01 · 自我介绍", sub: "わたしは～です", qs: [
                         ["わたし", "watashi", "“わたし”是什么意思？", ["你", "我", "他", "大家"], 1],
-                        ["わたしは りんです。", "watashi wa Rin desu", "这句话最接近：", ["我是 Rin。", "Rin 在哪里？", "Rin 是老师吗？",
-                            "请给我 Rin。"
-                        ], 0],
+                        ["わたしは りんです。", "watashi wa Rin desu", "这句话最接近：", ["我是 Rin。", "Rin 在哪里？", "Rin 是老师吗？", "请给我 Rin。"], 0],
                         ["です", "desu", "“です”在这里主要表示：", ["礼貌的判断/陈述", "过去", "否定", "疑问"], 0],
                         ["は", "wa", "“は”在“わたしは…”中主要标记：", ["主题", "宾语", "地点", "过去"], 0],
                         ["はじめまして", "hajimemashite", "初次见面时说：", ["おやすみなさい", "はじめまして", "ありがとう", "またね"], 1]
                     ] },
-                { title: "03 · 礼貌表达", qs: [
-                        ["ありがとうございます", "arigatou gozaimasu", "更礼貌的“谢谢”是：", ["ありがとう", "ありがとうございます", "すみません",
-                            "ください"
-                        ], 1],
+                { title: "02 · 问候与告别", sub: "こんにちは / さようなら", qs: [
+                        ["こんにちは", "konnichiwa", "“こんにちは”是什么意思？", ["你好", "谢谢", "再见", "对不起"], 0],
+                        ["おはようございます", "ohayou gozaimasu", "早上见面时最合适的是：", ["こんばんは", "おはようございます", "またね", "ありがとう"], 1],
+                        ["こんばんは", "konbanwa", "“こんばんは”是什么意思？", ["早上好", "谢谢", "晚上好", "请"], 2],
+                        ["またね", "mata ne", "“またね”是什么意思？", ["再见/下次见", "你好", "对不起", "谢谢"], 0],
+                        ["さようなら", "sayounara", "“さようなら”是什么意思？", ["你好", "谢谢", "再见", "晚安"], 2]
+                    ] },
+                { title: "03 · 数字与时间", sub: "数字・時間", qs: [
+                        ["いち", "ichi", "“いち”是什么意思？", ["一", "二", "三", "四"], 0],
+                        ["なな", "nana", "“なな”是什么意思？", ["五", "六", "七", "八"], 2],
+                        ["なんじ", "nanji", "“なんじ”是什么意思？", ["几点/什么时间", "今天", "明天", "昨天"], 0],
+                        ["いま", "ima", "“いま”是什么意思？", ["现在", "之后", "之前", "经常"], 0],
+                        ["ごぜん", "gozen", "“ごぜん”最接近：", ["上午/早上", "下午", "晚上", "中午"], 0]
+                    ] },
+                { title: "04 · 感谢与道歉", sub: "ありがとう / すみません", qs: [
+                        ["ありがとうございます", "arigatou gozaimasu", "更礼貌的“谢谢”是：", ["ありがとう", "ありがとうございます", "すみません", "ください"], 1],
                         ["すみません", "sumimasen", "常见意思之一是：", ["对不起/不好意思", "早上好", "我也是", "再见"], 0],
                         ["ください", "kudasai", "“ください”常用于：", ["请给我/请……", "已经……", "不要……", "过去……"], 0],
                         ["みずを ください", "mizu o kudasai", "“みず”是什么？", ["茶", "水", "饭", "书"], 1],
                         ["これを ください", "kore o kudasai", "最接近的意思：", ["请给我这个", "我不要这个", "这是哪里？", "我喜欢这个吗？"], 0]
                     ] },
-                { title: "04 · 单元复习", qs: [
+                { title: "05 · 日常饮食", sub: "～をください / 好き", qs: [
+                        ["たべます", "tabemasu", "“たべます”是什么意思？", ["吃", "喝", "看见", "做"], 0],
+                        ["のみます", "nomimasu", "“のみます”是什么意思？", ["吃", "喝", "买", "写"], 1],
+                        ["すき", "suki", "“すき”通常表示：", ["喜欢", "讨厌", "会/能", "想要"], 0],
+                        ["パン", "pan", "“パン”是什么？", ["饭/米饭", "面包", "水", "茶"], 1],
+                        ["おちゃ", "ocha", "“おちゃ”是什么？", ["茶", "咖啡", "牛奶", "果汁"], 0]
+                    ] },
+                { title: "06 · 购物", sub: "いくら / これ・それ", qs: [
+                        ["いくら", "ikura", "“いくら”通常用来问：", ["多少钱", "在哪里", "几点", "是谁"], 0],
+                        ["これ", "kore", "“これ”意思是：", ["这个", "那个（近对方）", "那个（远处）", "哪个"], 0],
+                        ["それ", "sore", "“それ”意思是：", ["这个", "那个（近对方）", "那个（远处）", "哪个"], 1],
+                        ["かいもの", "kaimono", "“かいもの”是什么意思？", ["吃饭", "购物", "睡觉", "学习"], 1],
+                        ["おかね", "okane", "“おかね”是什么？", ["时间", "钱", "东西", "人"], 1]
+                    ] },
+                { title: "07 · 家庭与家人", sub: "～がいます", qs: [
+                        ["ちち", "chichi", "“ちち”是什么？", ["父亲（自己的）", "母亲", "兄弟", "朋友"], 0],
+                        ["はは", "haha", "“はは”是什么？", ["母亲（自己的）", "父亲", "姐姐", "老师"], 0],
+                        ["きょうだい", "kyoudai", "“きょうだい”是什么意思？", ["兄弟姐妹", "父母", "孩子", "朋友"], 0],
+                        ["います", "imasu", "“～がいます”常表示：", ["有生命的人/动物存在", "无生命物存在", "去做", "喜欢"], 0],
+                        ["かぞく", "kazoku", "“かぞく”是什么？", ["家族/家人", "学校", "公司", "国家"], 0]
+                    ] },
+                { title: "08 · 日常活动", sub: "～ます / ～ました", qs: [
+                        ["みます", "mimasu", "“みます”是什么意思？", ["看/观看", "听", "说", "读"], 0],
+                        ["ききます", "kikimasu", "“ききます”是什么意思？", ["听", "看", "写", "吃"], 0],
+                        ["べんきょうします", "benkyoushimasu", "“べんきょうします”是什么意思？", ["学习", "工作", "休息", "旅行"], 0],
+                        ["ねます", "nemasu", "“ねます”是什么意思？", ["睡觉", "起床", "坐下", "站立"], 0],
+                        ["おきます", "okimasu", "“おきます”是什么意思？", ["起床", "睡觉", "来", "去"], 0]
+                    ] },
+                { title: "09 · 交通出行", sub: "～はどこですか", qs: [
+                        ["えき", "eki", "“えき”是什么？", ["车站", "电车", "机场", "银行"], 0],
+                        ["でんしゃ", "densha", "“でんしゃ”是什么？", ["电车/火车", "汽车", "自行车", "飞机"], 0],
+                        ["どこ", "doko", "“どこ”用来问：", ["哪里", "什么时候", "谁", "多少"], 0],
+                        ["とうきょう", "toukyou", "“とうきょう”是什么？", ["东京", "大阪", "京都", "名古屋"], 0],
+                        ["いきます", "ikimasu", "“いきます”是什么意思？", ["去", "来", "回", "住"], 0]
+                    ] },
+                { title: "10 · 方向与位置", sub: "右・左・前・後ろ", qs: [
+                        ["みぎ", "migi", "“みぎ”是哪个方向？", ["右", "左", "前", "后"], 0],
+                        ["ひだり", "hidari", "“ひだり”是哪个方向？", ["左", "右", "上", "下"], 1],
+                        ["まえ", "mae", "“まえ”是什么意思？", ["前/前面", "后/后面", "旁边", "里面"], 0],
+                        ["うしろ", "ushiro", "“うしろ”是什么意思？", ["后/后面", "前/前面", "上面", "下面"], 0],
+                        ["ちかく", "chikaku", "“ちかく”最接近：", ["附近/近处", "远处", "里面", "外面"], 0]
+                    ] },
+                { title: "11 · 天气与季节", sub: "天気・季節", qs: [
+                        ["てんき", "tenki", "“てんき”是什么？", ["天气", "气温", "季节", "风"], 0],
+                        ["あつい", "atsui", "“あつい”意思是：", ["热", "冷", "大", "小"], 0],
+                        ["さむい", "samui", "“さむい”意思是：", ["冷", "热", "晴", "雨"], 0],
+                        ["はる", "haru", "“はる”是哪个季节？", ["春", "夏", "秋", "冬"], 0],
+                        ["ふゆ", "fuyu", "“ふゆ”是哪个季节？", ["冬", "春", "夏", "秋"], 3]
+                    ] },
+                { title: "12 · 兴趣爱好", sub: "～がすきです", qs: [
+                        ["しゅみ", "shumi", "“しゅみ”是什么？", ["兴趣/爱好", "工作", "学校", "家人"], 0],
+                        ["おんがく", "ongaku", "“おんがく”是什么？", ["音乐", "运动", "电影", "书"], 0],
+                        ["すぽーつ", "supootsu", "“すぽーつ”是什么？", ["运动", "音乐", "游戏", "旅行"], 0],
+                        ["えいが", "eiga", "“えいが”是什么？", ["电影", "音乐", "电视", "照片"], 0],
+                        ["なに", "nani", "“なに”用来问：", ["什么", "谁", "哪里", "什么时候"], 0]
+                    ] },
+                { title: "13 · 过去经历", sub: "～ました（過去）", qs: [
+                        ["べんきょうしました", "benkyoushimashita", "“べんきょうしました”是什么意思？", ["学习了", "学习", "将学习", "不学习"], 0],
+                        ["たべました", "tabemashita", "“たべました”是什么意思？", ["吃了", "吃", "将吃", "不吃"], 0],
+                        ["いきました", "ikimashita", "“いきました”是什么意思？", ["去了", "去", "将去", "不来"], 0],
+                        ["みました", "mimashita", "“みました”是什么意思？", ["看了", "看", "将看", "不看"], 0],
+                        ["きのう", "kinou", "“きのう”是什么时候？", ["昨天", "今天", "明天", "前天"], 0]
+                    ] },
+                { title: "14 · 未来计划", sub: "～つもりです", qs: [
+                        ["あした", "ashita", "“あした”是什么时候？", ["明天", "今天", "昨天", "后天"], 0],
+                        ["つもり", "tsumori", "“～つもりです”表示：", ["打算/计划", "已经做了", "喜欢", "会做"], 0],
+                        ["りょこう", "ryokou", "“りょこう”是什么？", ["旅行", "工作", "学习", "购物"], 0],
+                        ["べんきょう", "benkyou", "“べんきょう”是什么？", ["学习", "运动", "吃饭", "睡觉"], 0],
+                        ["あした いきます", "ashita ikimasu", "“あした いきます”最接近：", ["明天去", "昨天去了", "正在去", "不去"], 0]
+                    ] },
+                { title: "15 · 请求与邀请", sub: "～ませんか / ～てください", qs: [
+                        ["しませんか", "shimasen ka", "“～ませんか”常用于：", ["邀请/提议一起做", "否定陈述", "疑问", "命令"], 0],
+                        ["いっしょに", "issho ni", "“いっしょに”是什么意思？", ["一起", "分开", "之后", "之前"], 0],
+                        ["てください", "te kudasai", "“～てください”表示：", ["请做某事", "不要做", "已经做", "能做"], 0],
+                        ["たべませんか", "tabemasen ka", "“いっしょに たべませんか”最接近：", ["一起吃饭好吗？", "不吃", "已经吃了", "请吃"], 0],
+                        ["おねがいします", "onegaishimasu", "“おねがいします”常用于：", ["拜托/请", "谢谢", "对不起", "再见"], 0]
+                    ] },
+                { title: "16 · 许可与禁止", sub: "～てもいい / ～てはいけない", qs: [
+                        ["てもいい", "te mo ii", "“～てもいい”表示：", ["可以做/允许", "禁止", "必须", "已经做"], 0],
+                        ["いけません", "ikemasen", "“～てはいけません”表示：", ["禁止/不可以", "允许", "会做", "喜欢"], 0],
+                        ["たばこ", "tabako", "“たばこ”是什么？", ["烟", "酒", "茶", "咖啡"], 0],
+                        ["ここ", "koko", "“ここ”意思是：", ["这里", "那里（近对方）", "那里（远处）", "哪里"], 0],
+                        ["のみてもいい", "nomite mo ii", "“ここで のみてもいい”最接近：", ["这里可以喝", "这里不可以喝", "请在这里喝", "不喝"], 0]
+                    ] },
+                { title: "17 · 比较与选择", sub: "～より / ～のほうが", qs: [
+                        ["より", "yori", "“～より”常用于：", ["比较（比…）", "和", "或者", "因为"], 0],
+                        ["ほうが", "hou ga", "“～のほうが”表示：", ["更…的一方", "最…", "不…", "也…"], 0],
+                        ["おおきい", "ookii", "“おおきい”意思是：", ["大", "小", "高", "低"], 0],
+                        ["ちいさい", "chiisai", "“ちいさい”意思是：", ["小", "大", "长", "短"], 1],
+                        ["やすい", "yasui", "“やすい”意思是：", ["便宜", "贵", "好吃", "难吃"], 0]
+                    ] },
+                { title: "18 · 原因与理由", sub: "～から / ～ので", qs: [
+                        ["から", "kara", "“～から”表示：", ["因为/理由", "所以", "但是", "而且"], 0],
+                        ["ので", "node", "“～ので”表示：", ["因为/由于", "所以", "但是", "或者"], 0],
+                        ["いそがしい", "isogashii", "“いそがしい”意思是：", ["忙", "闲", "累", "开心"], 0],
+                        ["だから", "dakara", "“だから”意思是：", ["所以", "因为", "但是", "然后"], 0],
+                        ["ねむい", "nemui", "“ねむい”意思是：", ["困/想睡", "饿", "渴", "冷"], 0]
+                    ] },
+                { title: "19 · 能力与可能", sub: "～ができます", qs: [
+                        ["できます", "dekimasu", "“～ができます”表示：", ["会/能够", "喜欢", "讨厌", "想要"], 0],
+                        ["はなします", "hanashimasu", "“はなします”是什么意思？", ["说/说话", "听", "读", "写"], 0],
+                        ["よみます", "yomimasu", "“よみます”是什么意思？", ["读", "写", "听", "说"], 0],
+                        ["かきます", "kakimasu", "“かきます”是什么意思？", ["写", "读", "听", "说"], 0],
+                        ["にほんご", "nihongo", "“にほんご”是什么？", ["日语", "英语", "中文", "韩语"], 0]
+                    ] },
+                { title: "20 · 单元综合", sub: "A1 総まとめ", qs: [
                         ["こんにちは", "konnichiwa", "请选择正确意思：", ["你好", "谢谢", "再见", "晚安"], 0],
                         ["わたし", "watashi", "请选择正确意思：", ["你", "我", "他", "老师"], 1],
                         ["ありがとう", "arigatou", "请选择正确意思：", ["谢谢", "你好", "请给我", "对不起"], 0],
                         ["ください", "kudasai", "请选择正确意思：", ["请给我/请……", "谢谢", "你好", "再见"], 0],
                         ["はじめまして", "hajimemashite", "请选择正确意思：", ["初次见面", "早上好", "晚安", "没关系"], 0]
                     ] }
+            ],
+            units: [
+                { title: "01 · A1.1 基础交流", desc: "自我介绍、问候、数字时间、感谢道歉", lessons: [0,1,2,3] },
+                { title: "02 · A1.2 日常生活", desc: "饮食、购物、家人、日常活动", lessons: [4,5,6,7] },
+                { title: "03 · A1.3 出行与兴趣", desc: "交通、方向、天气、爱好", lessons: [8,9,10,11] },
+                { title: "04 · A1.4 时态与请求", desc: "过去、未来、邀请、许可", lessons: [12,13,14,15] },
+                { title: "05 · A1.5 进阶表达", desc: "比较、原因、能力、综合", lessons: [16,17,18,19] }
             ],
             kana: [
                 ["あ", "a"],
@@ -815,7 +909,7 @@
                 ["ん", "n"]
             ],
 
-            state: { xp: 0, streak: 0, lastStudy: "", done: 0, weak: {}, apiKey: "", reviewQueue: {} },
+            state: { xp: 0, streak: 0, lastStudy: "", done: 0, doneLessons: [], currentLessonId: 0, weak: {}, apiKey: "", reviewQueue: {} },
             ci: 0,
             qi: 0,
             score: 0,
@@ -861,11 +955,47 @@
                 document.getElementById("pDone").textContent = this.state.done;
                 document.getElementById("pStreak").textContent = this.state.streak;
 
-                let pct = Math.min(100, Math.round(this.state.done / 8 * 100));
+                let pct = Math.min(100, Math.round(this.state.done / this.courses.length * 100));
                 document.getElementById("percent").textContent = pct + "%";
                 document.getElementById("overallBar").style.width = pct + "%";
-                document.getElementById("u1tag").textContent = this.state.done > 0 ? "学习中" : "进行中";
                 this.renderWeak();
+                this.renderPath();
+            },
+
+            renderPath() {
+                const pc = document.getElementById("pathContainer");
+                if (!pc) return;
+                const done = new Set(this.state.doneLessons || []);
+                const allDone = this.state.done >= this.courses.length;
+                let html = "";
+                this.units.forEach((u, ui) => {
+                    const lessonDone = u.lessons.filter(id => done.has(id)).length;
+                    let tag, tagCls;
+                    if (lessonDone === 0) { tag = "即将解锁"; tagCls = ""; }
+                    else if (lessonDone < u.lessons.length) { tag = "学习中 " + lessonDone + "/" + u.lessons.length; tagCls = "done"; }
+                    else { tag = "已完成"; tagCls = "done"; }
+                    html += `<div class="unit">
+                        <div class="unittop"><div><h3>${u.title}</h3><p>${u.desc}</p></div><span class="tag ${tagCls}">${tag}</span></div>
+                        <div class="skills"><div class="skill">听力<i style="--v:0%"></i></div><div class="skill">口语<i style="--v:0%"></i></div><div class="skill">阅读<i style="--v:0%"></i></div><div class="skill">写作<i style="--v:0%"></i></div></div>
+                        <div class="lessons">`;
+                    u.lessons.forEach((id, li) => {
+                        const isDone = done.has(id);
+                        const isCurrent = id === this.state.currentLessonId || (!allDone && id === this.nextLesson());
+                        const cls = "lesson" + (isCurrent ? " current" : "") + (isDone ? " done" : "");
+                        const idx = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩","⑪","⑫"][li] || (li + 1) + ".";
+                        html += `<button class="${cls}" onclick="App.startLesson(${id})"><strong>${idx} ${this.courses[id].title.split(" · ")[1] || this.courses[id].title}</strong><small>${this.courses[id].sub || ""}</small></button>`;
+                    });
+                    html += `</div></div>`;
+                });
+                pc.innerHTML = html;
+            },
+
+            nextLesson() {
+                if (!(this.state.doneLessons instanceof Array)) return 0;
+                for (let i = 0; i < this.courses.length; i++) {
+                    if (!this.state.doneLessons.includes(i)) return i;
+                }
+                return this.courses.length - 1;
             },
 
             nav(id, btn) {
@@ -882,6 +1012,7 @@
                 this.ci = i;
                 this.qi = 0;
                 this.score = 0;
+                this.state.currentLessonId = i;
                 this.nav("lesson");
                 this.renderQ();
             },
@@ -956,6 +1087,8 @@
                 };
 
                 this.state.done++;
+                if (!(this.state.doneLessons instanceof Array)) this.state.doneLessons = [];
+                if (!this.state.doneLessons.includes(this.ci)) this.state.doneLessons.push(this.ci);
                 // 打卡
                 let todayStr = new Date().toISOString().slice(0, 10);
                 if (this.state.lastStudy !== todayStr) {
@@ -1088,14 +1221,15 @@
                     reading: Math.min(100, base + 5),
                     writing: Math.min(100, base - 5)
                 };
-                // 更新主页Unit1的技能条
-                const unit1Bars = document.querySelectorAll('#skillsUnit1 .skill i');
-                if (unit1Bars.length === 4) {
-                    const vals = [skills.listening, skills.speaking, skills.reading, skills.writing];
-                    unit1Bars.forEach((bar, idx) => {
-                        bar.style.setProperty('--v', vals[idx] + '%');
-                    });
-                }
+                // 更新主页所有单元（动态渲染）的技能条
+                const unitBars = document.querySelectorAll('#pathContainer .skills');
+                unitBars.forEach(group => {
+                    const bars = group.querySelectorAll('.skill i');
+                    if (bars.length === 4) {
+                        const vals = [skills.listening, skills.speaking, skills.reading, skills.writing];
+                        bars.forEach((bar, idx) => bar.style.setProperty('--v', vals[idx] + '%'));
+                    }
+                });
                 // 更新Profile的技能条
                 const profileBars = document.querySelectorAll('#skillsProfile .skill i');
                 if (profileBars.length === 4) {
