@@ -690,13 +690,14 @@
 
             <section id="review" class="screen">
                 <div class="card"><h2>复习</h2>
-                    <div class="reviewbox"><h3>间隔重复 · 待复习课程</h3>
+                    <div class="reviewbox"><h3>间隔重复 · 待复习单元</h3>
                         <div id="dueReviewList"></div>
+                        <div id="genStatus" class="notice" style="min-height:16px"></div>
                     </div>
                     <div class="reviewbox" style="margin-top:12px"><h3>📝 高频错词</h3>
                         <div class="weak" id="weak"></div>
                     </div>
-                    <div class="sectiontitle">今日建议</div><button class="goal" style="width:100%;text-align:left;border:1px solid var(--line)" onclick="App.startLesson(3)"><div class="goalicon">↻</div><div><b>复习基础问候</b><span>重点强化你最近容易混淆的表达</span></div><div>›</div></button>
+                    <div class="sectiontitle">今日建议</div><button class="goal" style="width:100%;text-align:left;border:1px solid var(--line)" onclick="App.startReviewUnit(0)"><div class="goalicon">↻</div><div><b>复习单元一</b><span>重点强化你最近容易混淆的表达</span></div><div>›</div></button>
                 </div>
             </section>
 
@@ -932,7 +933,7 @@
                 ["ん", "n"]
             ],
 
-            state: { xp: 0, streak: 0, lastStudy: "", done: 0, doneLessons: [], currentLessonId: 0, weak: {}, apiKey: "", baseUrl: "", model: "gpt-4o-mini", reviewQueue: {} },
+            state: { xp: 0, streak: 0, lastStudy: "", done: 0, doneLessons: [], currentLessonId: 0, weak: {}, apiKey: "", baseUrl: "", model: "gpt-4o-mini", unitLessons: {}, reviewQueue: {} },
             ci: 0,
             qi: 0,
             score: 0,
@@ -941,6 +942,10 @@
             useAI: false,
             activeQs: null,
             loading: false,
+            reviewing: false,
+            reviewPlan: [],
+            reviewIdx: 0,
+            reviewUnit: null,
 
             init() {
                 const saved = localStorage.getItem("japanesePathV2");
@@ -955,6 +960,8 @@
                         }
                         // 确保 reviewQueue 存在
                         if (!parsed.reviewQueue) parsed.reviewQueue = {};
+                        // 确保 unitLessons 存在
+                        if (!parsed.unitLessons || typeof parsed.unitLessons !== "object") parsed.unitLessons = {};
                         this.state = Object.assign(this.state, parsed);
                     } catch (e) { console.error("读取本地存储失败", e); }
                 }
@@ -1034,33 +1041,73 @@
                 this.update();
             },
 
+            unitOfLesson(ci) {
+                for (let i = 0; i < this.units.length; i++) {
+                    if (this.units[i].lessons.indexOf(ci) >= 0) return i;
+                }
+                return -1;
+            },
+
             startLesson(i) {
                 if (this.loading) return;
+                this.reviewing = false;
                 this.ci = i;
                 this.qi = 0;
                 this.score = 0;
                 this.state.currentLessonId = i;
                 this.nav("lesson");
                 this.setAIStatus("");
+                const ui = this.unitOfLesson(i);
+                const cached = this.state.unitLessons[ui] && this.state.unitLessons[ui][i];
                 if (this.useAI && this.aiEnabled()) {
-                    this.loading = true;
-                    this.setAIStatus("🤖 AI 正在生成新题…");
-                    this.renderQ();
-                    this.loading = false;
-                    this.generateQuestions(this.courses[i]).then(qs => {
-                        this.activeQs = qs;
-                        this.setAIStatus("🤖 已用 AI 生成 " + qs.length + " 道新题");
-                        this.qi = 0; this.score = 0;
+                    if (cached) {
+                        this.activeQs = cached;
                         this.renderQ();
-                    }).catch(e => {
-                        this.activeQs = this.courses[i].qs;
-                        this.setAIStatus("⚠️ AI 生成失败，已用内置题库：" + e.message);
-                        this.renderQ();
-                    });
+                        this.setAIStatus("🤖 本单元已用 AI 题");
+                    } else {
+                        this.loading = true;
+                        this.setAIStatus("🤖 正在为本单元生成题目…");
+                        const prev = ui > 0 ? ui - 1 : ui;
+                        this.generateUnitQuestions(ui, this.computeUnitStats(prev)).then(res => {
+                            this.state.unitLessons[ui] = Object.assign(this.state.unitLessons[ui] || {}, res);
+                            this.save();
+                            this.activeQs = this.state.unitLessons[ui][i] || this.courses[i].qs;
+                            this.loading = false;
+                            this.setAIStatus("🤖 已用 AI 生成本单元题目");
+                            this.renderQ();
+                        }).catch(e => {
+                            this.loading = false;
+                            this.activeQs = this.courses[i].qs;
+                            this.setAIStatus("⚠️ AI 生成失败，已用内置题库：" + e.message);
+                            this.renderQ();
+                        });
+                    }
                 } else {
-                    this.activeQs = this.courses[i].qs;
+                    this.activeQs = cached || this.courses[i].qs;
                     this.renderQ();
                 }
+            },
+
+            startReviewUnit(unitIdx) {
+                const u = this.units[unitIdx];
+                if (!u) return;
+                this.reviewing = true;
+                this.reviewUnit = unitIdx;
+                this.reviewPlan = u.lessons.slice();
+                this.reviewIdx = 0;
+                this._beginReviewLesson();
+            },
+
+            _beginReviewLesson() {
+                const id = this.reviewPlan[this.reviewIdx];
+                this.ci = id;
+                this.qi = 0;
+                this.score = 0;
+                this.state.currentLessonId = id;
+                this.nav("lesson");
+                const ul = this.state.unitLessons[this.reviewUnit];
+                this.activeQs = (ul && ul[id]) || this.courses[id].qs;
+                this.renderQ();
             },
 
             currentQs() {
@@ -1069,6 +1116,11 @@
 
             setAIStatus(text) {
                 const el = document.getElementById("aiStatus");
+                if (el) el.textContent = text || "";
+            },
+
+            setGenStatus(text) {
+                const el = document.getElementById("genStatus");
                 if (el) el.textContent = text || "";
             },
 
@@ -1139,19 +1191,52 @@
                     this.renderQ();
                     return;
                 }
-                // 课程完成，调度复习
+                // 复习模式：本单元内逐课推进
+                if (this.reviewing) {
+                    const ui = this.reviewUnit;
+                    const accuracy = this.score / this.currentQs().length;
+                    let interval = accuracy >= 0.8 ? 3 : (accuracy >= 0.6 ? 2 : 1);
+                    const today = new Date().toISOString().slice(0, 10);
+                    const due = new Date(Date.now() + interval * 86400000).toISOString().slice(0, 10);
+                    this.state.reviewQueue[ui] = { lastReview: today, interval: interval, due: due, title: this.units[ui].title };
+                    this.save();
+                    if (this.reviewIdx < this.reviewPlan.length - 1) {
+                        this.reviewIdx++;
+                        this._beginReviewLesson();
+                    } else {
+                        this.reviewing = false;
+                        this.reviewUnit = null;
+                        document.getElementById("doneText").textContent = "单元复习完成！本单元易错点已记录，将在复习日再次提醒。";
+                        document.getElementById("doneModal").classList.add("show");
+                    }
+                    return;
+                }
+                // 课程完成
                 const accuracy = this.score / this.currentQs().length;
-                let interval = 1;
-                if (accuracy >= 0.8) interval = 3;
-                else if (accuracy >= 0.6) interval = 2;
-                const today = new Date().toISOString().slice(0, 10);
-                const dueDate = new Date(Date.now() + interval * 86400000).toISOString().slice(0, 10);
-                this.state.reviewQueue[this.ci] = {
-                    lastReview: today,
-                    interval: interval,
-                    due: dueDate,
-                    title: this.courses[this.ci].title
-                };
+                const ui = this.unitOfLesson(this.ci);
+                const u = this.units[ui];
+                if (u) {
+                    let interval = accuracy >= 0.8 ? 3 : (accuracy >= 0.6 ? 2 : 1);
+                    const today = new Date().toISOString().slice(0, 10);
+                    const dueDate = new Date(Date.now() + interval * 86400000).toISOString().slice(0, 10);
+                    this.state.reviewQueue[ui] = { lastReview: today, interval: interval, due: dueDate, title: u.title };
+                    // 整单元完成后：调度下一单元 AI 生成（依据本单元薄弱项）
+                    const unitDone = u.lessons.every(id => this.state.doneLessons.includes(id));
+                    if (unitDone && ui + 1 < this.units.length) {
+                        const nui = ui + 1;
+                        if (this.useAI && this.aiEnabled() && !this.state.unitLessons[nui]) {
+                            this.setGenStatus("🤖 正在为下一单元（" + this.units[nui].title + "）生成题目…");
+                            this.generateUnitQuestions(nui, this.computeUnitStats(ui)).then(res => {
+                                this.state.unitLessons[nui] = Object.assign(this.state.unitLessons[nui] || {}, res);
+                                this.save();
+                                this.setGenStatus("");
+                            }).catch(e => {
+                                this.setGenStatus("⚠️ 下一单元 AI 生成失败，将使用内置题库：" + e.message);
+                                setTimeout(() => this.setGenStatus(""), 4000);
+                            });
+                        }
+                    }
+                }
 
                 this.state.done++;
                 if (!(this.state.doneLessons instanceof Array)) this.state.doneLessons = [];
@@ -1169,7 +1254,7 @@
                 }
                 this.save();
                 document.getElementById("doneText").textContent =
-                    `本课答对 ${this.score}/${this.currentQs().length}。错题已记录，复习计划已更新。`;
+                    `本课答对 ${this.score}/${this.currentQs().length}。错题已记录，单元复习计划已更新。`;
                 document.getElementById("doneModal").classList.add("show");
             },
 
@@ -1261,19 +1346,19 @@
                 const container = document.getElementById("dueReviewList");
                 if (!container) return;
                 const today = new Date().toISOString().slice(0, 10);
-                const dueItems = Object.keys(this.state.reviewQueue).filter(idx => {
-                    return this.state.reviewQueue[idx].due <= today;
-                });
-                if (!dueItems.length) {
+                const dueUnits = Object.keys(this.state.reviewQueue)
+                    .map(Number)
+                    .filter(idx => this.units[idx] && this.state.reviewQueue[idx].due <= today);
+                if (!dueUnits.length) {
                     container.innerHTML =
-                    '<p style="color:var(--muted);font-size:13px;">暂无到期的复习课程，继续学习新内容吧！</p>';
+                    '<p style="color:var(--muted);font-size:13px;">暂无到期的复习单元，继续学习新内容吧！</p>';
                     return;
                 }
-                container.innerHTML = dueItems.map(idx => {
+                container.innerHTML = dueUnits.map(idx => {
                     const item = this.state.reviewQueue[idx];
                     return `<div class="review-item">
                                 <span><strong>${item.title}</strong> (距上次复习 ${item.interval} 天)</span>
-                                <button class="review-btn" onclick="App.startLesson(${idx})">开始复习</button>
+                                <button class="review-btn" onclick="App.startReviewUnit(${idx})">开始复习</button>
                             </div>`;
                 }).join('');
             },
@@ -1336,20 +1421,11 @@
                 try { return JSON.parse(t); } catch (e) { return null; }
             },
 
-            // 让 AI 围绕某课生成新题；清洗校验后返回 [jp,romaji,prompt,opts,ans] 数组；失败抛出
-            async generateQuestions(lesson) {
-                const sys = `你是日语 A1 题库生成器。只输出一个 JSON 对象，格式严格为：
-{"questions":[{"jp":字符串(日文词/句),"romaji":字符串(罗马音),"prompt":字符串(用中文提问含义或用法),"options":[4个互不相同的字符串(中文候选)],"answer":整数(正确项下标0-3)}]}
-共生成 5 题，围绕主题「${lesson.title}」（${lesson.sub}）。prompt 用中文，options 为4个中文候选且互不相同，answer 为正确选项下标(0-3)。不要任何解释文字。`;
-                const raw = await this.callAI(
-                    [{ role: "system", content: sys }, { role: "user", content: "生成题目" }],
-                    { json: true, temperature: 0.85 }
-                );
-                const obj = this.parseJSONSafe(raw);
-                const arr = obj && (obj.questions || obj);
-                if (!Array.isArray(arr) || !arr.length) throw new Error("返回格式不符");
+            // 把模型返回的单个题目列表清洗为 [jp,romaji,prompt,opts,ans]；返回有效题数组（可能为空）
+            cleanQuestions(list) {
+                if (!Array.isArray(list)) return [];
                 const qs = [];
-                for (const it of arr.slice(0, 5)) {
+                for (const it of list.slice(0, 5)) {
                     if (!it || !it.jp || !Array.isArray(it.options) || it.options.length !== 4) continue;
                     const opts = it.options.map(o => String(o).trim()).filter(Boolean);
                     if (opts.length !== 4) continue;
@@ -1358,8 +1434,52 @@
                     if (!Number.isInteger(ans) || ans < 0 || ans > 3) ans = 0;
                     qs.push([String(it.jp), String(it.romaji || ""), String(it.prompt || it.jp), opts, ans]);
                 }
-                if (qs.length < 3) throw new Error("有效题数不足 (" + qs.length + ")");
                 return qs;
+            },
+
+            // 统计某单元的薄弱项（基于 weak 中属于该单元题目的错词）
+            computeUnitStats(unitIdx) {
+                const u = this.units[unitIdx];
+                if (!u) return { weakWords: [] };
+                const jpSet = new Set();
+                u.lessons.forEach(id => this.courses[id].qs.forEach(q => jpSet.add(q[0])));
+                const weakWords = Object.keys(this.state.weak)
+                    .filter(w => jpSet.has(w))
+                    .sort((a, b) => this.state.weak[b].count - this.state.weak[a].count)
+                    .slice(0, 8);
+                return { weakWords: weakWords };
+            },
+
+            // 让 AI 围绕整个单元生成 4 课题目（一次请求）；返回 { [lessonId]: 5题 }
+            async generateUnitQuestions(unitIdx, stats) {
+                const u = this.units[unitIdx];
+                if (!u) throw new Error("单元不存在");
+                const lessonsDesc = u.lessons.map((id, i) =>
+                    `第${i + 1}课 ${this.courses[id].title}（${this.courses[id].sub}）`
+                ).join("；");
+                const weakLine = stats && stats.weakWords && stats.weakWords.length
+                    ? "上一单元易错表达：「" + stats.weakWords.join("、") + "」。请在本单元题目中穿插这些词汇的巩固题，并针对它们出辨析题。"
+                    : "上一单元掌握良好，按正常难度出题即可。";
+                const sys = `你是日语 A1 题库生成器。只输出一个 JSON 对象，格式严格为：
+{"lessons":[{"questions":[{"jp":字符串(日文词/句),"romaji":字符串(罗马音),"prompt":字符串(用中文提问含义或用法),"options":[4个互不相同的字符串(中文候选)],"answer":整数(正确项下标0-3)}]}]}
+共 ${u.lessons.length} 个课块，每块 5 题，顺序严格对应下面列出的课程。每题 prompt 用中文，options 为4个互不相同的中文候选，answer 为正确项下标(0-3)。不要任何解释文字。
+${weakLine}`;
+                const raw = await this.callAI(
+                    [{ role: "system", content: sys }, { role: "user", content: "生成单元题目：" + lessonsDesc }],
+                    { json: true, temperature: 0.85 }
+                );
+                const obj = this.parseJSONSafe(raw);
+                const arr = obj && (obj.lessons || obj);
+                if (!Array.isArray(arr) || !arr.length) throw new Error("返回格式不符");
+                const result = {};
+                u.lessons.forEach((id, i) => {
+                    const blk = arr[i];
+                    if (!blk || !Array.isArray(blk.questions)) return;
+                    const qs = this.cleanQuestions(blk.questions);
+                    if (qs.length >= 3) result[id] = qs;
+                });
+                if (Object.keys(result).length === 0) throw new Error("有效课数为 0");
+                return result;
             },
 
             // 兼容 OpenAI 格式的 chat completion 调用
