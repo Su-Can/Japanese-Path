@@ -689,7 +689,7 @@
                         <div class="skill">写作<i style="--v:0%"></i></div>
                     </div>
                     <h3 style="margin-top:25px">AI 课程增强设置</h3>
-                    <div class="notice" style="margin-top:0">兼容 OpenAI 格式（/v1/chat/completions）。填好后可让 AI 生成练习题目；不填则使用内置种子题库，离线也能学完 A1。</div>
+                    <div class="notice" style="margin-top:0">兼容 OpenAI 格式：请求会向「Base URL + /chat/completions」发起。填好后可让 AI 生成练习题目；不填则使用内置种子题库，离线也能学完 A1。</div>
                     <input type="password" id="apiKey" class="input-key" placeholder="API Key（必填）" onchange="App.saveAIConfig()">
                     <input type="text" id="baseUrl" class="input-key" placeholder="Base URL（必填，如 https://api.openai.com/v1）" onchange="App.saveAIConfig()">
                     <input type="text" id="model" class="input-key" placeholder="Model（默认 gpt-4o-mini）" onchange="App.saveAIConfig()">
@@ -1263,7 +1263,7 @@
             async callAI(messages, opts) {
                 opts = opts || {};
                 if (!this.aiEnabled()) throw new Error("未配置 API Key 或 Base URL");
-                const url = this.state.baseUrl.replace(/\/v1\/?$/, "") + "/v1/chat/completions";
+                const url = this.state.baseUrl.replace(/\/+$/, "") + "/chat/completions";
                 const body = {
                     model: this.state.model || "gpt-4o-mini",
                     messages: messages,
