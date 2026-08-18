@@ -1682,13 +1682,29 @@
                 if (!Array.isArray(list)) return [];
                 const qs = [];
                 for (const it of list.slice(0, 5)) {
-                    if (!it || !it.jp || !Array.isArray(it.options) || it.options.length !== 4) continue;
-                    const opts = it.options.map(o => String(o).trim()).filter(Boolean);
+                    if (!it) continue;
+                    // 兼容模型把字段返回成对象的情况（如 {text:"…"}）
+                    const jp = (typeof it.jp === "string") ? it.jp.trim()
+                        : (it.jp && (it.jp.text || it.jp.jp)) || "";
+                    if (!jp) continue;
+                    const romaji = (typeof it.romaji === "string") ? it.romaji.trim()
+                        : (it.romaji && (it.romaji.text || it.romaji.romaji)) || "";
+                    const prompt = (typeof it.prompt === "string") ? it.prompt.trim()
+                        : (it.prompt && it.prompt.text) || jp;
+                    // options 可能是字符串数组、对象数组、或 {A:"…",B:"…"} 形式
+                    let rawOpts = Array.isArray(it.options) ? it.options
+                        : (it.options && typeof it.options === "object") ? Object.values(it.options)
+                        : [];
+                    const opts = rawOpts.map(o => {
+                        if (typeof o === "string") return o.trim();
+                        if (o && typeof o === "object") return String(o.text || o.content || o.option || o.value || o.label || "").trim();
+                        return String(o == null ? "" : o).trim();
+                    }).filter(Boolean);
                     if (opts.length !== 4) continue;
                     if (new Set(opts).size !== 4) continue; // 去重检查
                     let ans = Number(it.answer);
                     if (!Number.isInteger(ans) || ans < 0 || ans > 3) ans = 0;
-                    qs.push([String(it.jp), String(it.romaji || ""), String(it.prompt || it.jp), opts, ans]);
+                    qs.push([jp, romaji, prompt, opts, ans]);
                 }
                 return qs;
             },
@@ -1718,23 +1734,38 @@
                     : "上一单元掌握良好，按正常难度出题即可。";
                 const sys = `你是日语 A1 题库生成器。只输出一个 JSON 对象，格式严格为：
 {"lessons":[{"questions":[{"jp":字符串(日文词/句),"romaji":字符串(罗马音),"prompt":字符串(用中文提问含义或用法),"options":[4个互不相同的字符串(中文候选)],"answer":整数(正确项下标0-3)}]}]}
-共 ${u.lessons.length} 个课块，每块 5 题，顺序严格对应下面列出的课程。每题 prompt 用中文，options 为4个互不相同的中文候选，answer 为正确项下标(0-3)。不要任何解释文字。
+共 ${u.lessons.length} 个课块，每块 5 题，顺序严格对应下面列出的课程。每题 prompt 用中文；options 必须是「长度为 4 的纯字符串数组」（不能是对象），4 项互不相同；answer 必须是「整数 0-3」（表示 options 的下标，不能是文字或 1-based）。除 JSON 外不要任何解释文字。
 ${weakLine}`;
-                const raw = await this.callAI(
-                    [{ role: "system", content: sys }, { role: "user", content: "生成单元题目：" + lessonsDesc }],
-                    { json: true, temperature: 0.85 }
-                );
+                const msgs = [{ role: "system", content: sys }, { role: "user", content: "生成单元题目：" + lessonsDesc }];
+                let raw;
+                try {
+                    // 注意：glm-4.5-flash 在 response_format=json_object 下会长时间挂起（实测 180s 超时），
+                    // 故不请求 json 模式，仅用 prompt 约束输出纯 JSON；parseJSONSafe 会从正文抽取 {…}
+                    raw = await this.callAI(msgs, { json: false, temperature: 0.85, timeout: 120000 });
+                } catch (e) {
+                    // 首次失败（慢/超时/跨域）：不加任何 json 模式再试一次，并更强约束只输出 JSON
+                    this.log("info", "单元题首次生成失败（" + e.message + "），以纯文本模式重试一次…");
+                    const strict = Object.assign({}, msgs[0], { content: msgs[0].content + "\n【重试】必须只输出一个 JSON 对象，不要任何前后说明文字。" });
+                    raw = await this.callAI([strict, msgs[1]], { json: false, temperature: 0.85, timeout: 120000 });
+                }
                 const obj = this.parseJSONSafe(raw);
                 const arr = obj && (obj.lessons || obj);
                 if (!Array.isArray(arr) || !arr.length) throw new Error("返回格式不符");
                 const result = {};
                 u.lessons.forEach((id, i) => {
                     const blk = arr[i];
-                    if (!blk || !Array.isArray(blk.questions)) return;
+                    if (!blk || !Array.isArray(blk.questions)) {
+                        this.log("warn", "单元题块#" + i + " 缺少 questions 数组，跳过");
+                        return;
+                    }
                     const qs = this.cleanQuestions(blk.questions);
                     if (qs.length >= 3) result[id] = qs;
+                    else this.log("warn", "单元题块#" + i + " 有效题仅 " + qs.length + " 道（<3），跳过");
                 });
-                if (Object.keys(result).length === 0) throw new Error("有效课数为 0");
+                if (Object.keys(result).length === 0) {
+                    this.log("error", "单元#" + unitIdx + " 有效课数为 0；原始回复（前 800 字符）：\n" + (raw || "").slice(0, 800));
+                    throw new Error("有效课数为 0");
+                }
                 return result;
             },
 
@@ -1742,6 +1773,12 @@ ${weakLine}`;
             async callAI(messages, opts) {
                 opts = opts || {};
                 if (!this.aiEnabled()) { this.log("error", "callAI 失败：未配置 API Key 或 Base URL"); throw new Error("未配置 API Key 或 Base URL"); }
+                // 全局串行：同一时刻只允许一个 callAI 在飞。否则生成题与手动"测试连接"会并发请求同一 Key，
+                // 触发提供方 RPM/并发限流（如 HTTP 429 / 1302）。后来的请求排队等上一笔结束再发。
+                if (this._aiGate) { await this._aiGate; }
+                let gateResolve;
+                this._aiGate = new Promise(r => { gateResolve = r; });
+                try {
                 const url = this.state.baseUrl.replace(/\/+$/, "") + "/chat/completions";
                 const body = {
                     model: this.state.model || "gpt-4o-mini",
@@ -1749,9 +1786,13 @@ ${weakLine}`;
                     temperature: opts.temperature != null ? opts.temperature : 0.7
                 };
                 if (opts.json) body.response_format = { type: "json_object" };
-                this.log("info", "callAI 请求 → " + url + "（model=" + body.model + (opts.json ? ", json" : "") + "）");
+                const timeoutMs = opts.timeout != null ? opts.timeout : 180000;
+                this.log("info", "callAI 请求 → " + url + "（model=" + body.model + (opts.json ? ", json" : "") + "，超时 " + Math.round(timeoutMs / 1000) + "s）");
                 const t0 = performance.now();
                 let res;
+                const ctrl = new AbortController();
+                let timedOut = false;
+                const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, timeoutMs);
                 try {
                     res = await fetch(url, {
                         method: "POST",
@@ -1759,31 +1800,58 @@ ${weakLine}`;
                             "Content-Type": "application/json",
                             "Authorization": "Bearer " + this.state.apiKey
                         },
-                        body: JSON.stringify(body)
+                        body: JSON.stringify(body),
+                        signal: ctrl.signal
                     });
                 } catch (netErr) {
-                    // 多为 CORS / 网络不可达 / 地址错误
-                    this.log("error", "callAI 网络请求失败：" + (netErr && netErr.message ? netErr.message : netErr) + "（可能是 CORS、地址错误或离线）", netErr && netErr.stack);
-                    throw netErr;
+                    let msg = (netErr && netErr.message) ? netErr.message : String(netErr);
+                    let hint = "（可能是网络慢、跨域 CORS 被拦截、或离线）";
+                    if (timedOut || (netErr && netErr.name === "AbortError")) {
+                        msg = "请求超时（>" + Math.round(timeoutMs / 1000) + "s）";
+                        hint = "（模型响应过慢，或在浏览器 file:// 下跨域被拦截）";
+                    }
+                    this.log("error", "callAI 网络请求失败：" + msg + hint, netErr && netErr.stack);
+                    throw new Error("网络请求失败：" + msg + hint);
+                } finally {
+                    clearTimeout(timer);
                 }
                 const dt = Math.round(performance.now() - t0);
                 if (!res.ok) {
                     let detail = "";
                     try { detail = (await res.text()).slice(0, 300); } catch (e) {}
-                    this.log("error", "callAI 返回 HTTP " + res.status + "（耗时 " + dt + "ms）", detail);
-                    throw new Error("HTTP " + res.status + " " + detail);
+                    // 429 等限流：错误信息已含提供方原文，前端会据此提示"稍后再试"
+                    const isRate = res.status === 429;
+                    this.log("error", "callAI 返回 HTTP " + res.status + (isRate ? "（限流，请稍后再试）" : "") + "（耗时 " + dt + "ms）", detail);
+                    throw new Error("HTTP " + res.status + (isRate ? " 请求过于频繁，请稍候再试" : " ") + detail);
                 }
                 const data = await res.json();
+                // 部分提供方（如智谱 BigModel）会以 HTTP 200 返回 {"error":{...}}，必须在 body 里识别鉴权/业务错误
+                if (data && data.error) {
+                    const code = data.error.code != null ? data.error.code : "";
+                    const msg = data.error.message || JSON.stringify(data.error);
+                    this.log("error", "callAI 业务错误（code=" + code + "）：" + msg);
+                    throw new Error((code ? "[" + code + "] " : "") + msg);
+                }
                 const content = data.choices && data.choices[0] && data.choices[0].message
                     ? data.choices[0].message.content : "";
                 this.log("ok", "callAI 成功（耗时 " + dt + "ms，回复 " + content.length + " 字符）");
                 return content;
+                } finally {
+                    gateResolve();
+                    this._aiGate = null;
+                }
             },
 
             async testAI() {
                 const out = document.getElementById("aiTestResult");
                 if (out) out.textContent = "连接中…";
                 this.log("info", "testAI：开始测试连接");
+                // 若有 AI 请求（生成题/上一次测试）正在飞行，先不叠加，避免并发触发 429 限流
+                if (this._aiGate || this.loading) {
+                    if (out) out.textContent = "⏳ AI 请求进行中，请稍候…";
+                    this.log("warn", "testAI 跳过：已有 AI 请求在飞");
+                    return;
+                }
                 if (!this.aiEnabled()) {
                     if (out) out.textContent = "⚠️ 请先填写 API Key 和 Base URL";
                     this.log("warn", "testAI：未填写 API Key / Base URL");
