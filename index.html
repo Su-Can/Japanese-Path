@@ -437,6 +437,23 @@
         .secondary {
             background: #eee9e1
         }
+        .secondary.small {
+            flex: 0 0 auto;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: 700
+        }
+        .aitoggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0 4px;
+            flex-wrap: wrap
+        }
+        .aistatus {
+            font-size: 13px;
+            color: var(--muted)
+        }
         .tabs {
             position: fixed;
             z-index: 20;
@@ -644,6 +661,10 @@
                 <div class="card">
                     <button class="back" onclick="App.nav('home')">‹ 返回学习路径</button>
                     <div class="qtop"><span id="lessonTitle">课程</span><span id="qnum">1/5</span></div>
+                    <div class="aitoggle">
+                        <button class="secondary small" id="aiToggleBtn" onclick="App.toggleAI()">🤖 AI 增强：关</button>
+                        <span class="aistatus" id="aiStatus"></span>
+                    </div>
                     <div class="bar"><i id="qbar"></i></div>
                     <div class="question" id="question">こんにちは</div><div class="roman" id="roman">konnichiwa</div><div class="hint" id="hint">选择正确意思</div>
                     <div class="answers" id="answers"></div><div class="feedback" id="feedback"></div>
@@ -917,6 +938,9 @@
             score: 0,
             answered: false,
             kanaQuizTimer: null,
+            useAI: false,
+            activeQs: null,
+            loading: false,
 
             init() {
                 const saved = localStorage.getItem("japanesePathV2");
@@ -1011,20 +1035,61 @@
             },
 
             startLesson(i) {
+                if (this.loading) return;
                 this.ci = i;
                 this.qi = 0;
                 this.score = 0;
                 this.state.currentLessonId = i;
                 this.nav("lesson");
-                this.renderQ();
+                this.setAIStatus("");
+                if (this.useAI && this.aiEnabled()) {
+                    this.loading = true;
+                    this.setAIStatus("🤖 AI 正在生成新题…");
+                    this.renderQ();
+                    this.loading = false;
+                    this.generateQuestions(this.courses[i]).then(qs => {
+                        this.activeQs = qs;
+                        this.setAIStatus("🤖 已用 AI 生成 " + qs.length + " 道新题");
+                        this.qi = 0; this.score = 0;
+                        this.renderQ();
+                    }).catch(e => {
+                        this.activeQs = this.courses[i].qs;
+                        this.setAIStatus("⚠️ AI 生成失败，已用内置题库：" + e.message);
+                        this.renderQ();
+                    });
+                } else {
+                    this.activeQs = this.courses[i].qs;
+                    this.renderQ();
+                }
+            },
+
+            currentQs() {
+                return this.activeQs || this.courses[this.ci].qs;
+            },
+
+            setAIStatus(text) {
+                const el = document.getElementById("aiStatus");
+                if (el) el.textContent = text || "";
+            },
+
+            toggleAI() {
+                if (!this.aiEnabled()) {
+                    this.setAIStatus("⚠️ 请先在「我的」页填写 API Key 与 Base URL");
+                    return;
+                }
+                this.useAI = !this.useAI;
+                const btn = document.getElementById("aiToggleBtn");
+                if (btn) btn.textContent = "🤖 AI 增强：" + (this.useAI ? "开" : "关");
+                // 重新进入当前课（用/不用 AI）
+                this.startLesson(this.ci);
             },
 
             renderQ() {
-                const q = this.courses[this.ci].qs[this.qi];
+                const q = this.currentQs()[this.qi];
                 this.answered = false;
                 document.getElementById("lessonTitle").textContent = this.courses[this.ci].title;
-                document.getElementById("qnum").textContent = `${this.qi + 1}/${this.courses[this.ci].qs.length}`;
-                document.getElementById("qbar").style.width = (this.qi / this.courses[this.ci].qs.length * 100) + "%";
+                document.getElementById("qnum").textContent = `${this.qi + 1}/${this.currentQs().length}`;
+                document.getElementById("qbar").style.width = (this.qi / this.currentQs().length * 100) + "%";
                 document.getElementById("question").textContent = q[0];
                 document.getElementById("roman").textContent = q[1];
                 document.getElementById("hint").textContent = q[2];
@@ -1046,7 +1111,7 @@
             answer(i, btn) {
                 if (this.answered) return;
                 this.answered = true;
-                let q = this.courses[this.ci].qs[this.qi];
+                let q = this.currentQs()[this.qi];
                 document.querySelectorAll(".answer").forEach(x => x.disabled = true);
 
                 if (i === q[4]) {
@@ -1069,13 +1134,13 @@
             },
 
             nextQ() {
-                if (this.qi < this.courses[this.ci].qs.length - 1) {
+                if (this.qi < this.currentQs().length - 1) {
                     this.qi++;
                     this.renderQ();
                     return;
                 }
                 // 课程完成，调度复习
-                const accuracy = this.score / this.courses[this.ci].qs.length;
+                const accuracy = this.score / this.currentQs().length;
                 let interval = 1;
                 if (accuracy >= 0.8) interval = 3;
                 else if (accuracy >= 0.6) interval = 2;
@@ -1104,14 +1169,14 @@
                 }
                 this.save();
                 document.getElementById("doneText").textContent =
-                    `本课答对 ${this.score}/${this.courses[this.ci].qs.length}。错题已记录，复习计划已更新。`;
+                    `本课答对 ${this.score}/${this.currentQs().length}。错题已记录，复习计划已更新。`;
                 document.getElementById("doneModal").classList.add("show");
             },
 
             closeModal() { document.getElementById("doneModal").classList.remove("show"); },
 
             speakCurrent() {
-                const text = this.courses[this.ci].qs[this.qi][0];
+                const text = this.currentQs()[this.qi][0];
                 this.speak(text);
             },
 
@@ -1257,6 +1322,44 @@
 
             aiEnabled() {
                 return !!(this.state.apiKey && this.state.baseUrl);
+            },
+
+            // 从模型回复中安全解析 JSON：剥离 ```json 围栏、截取首个 {…}
+            parseJSONSafe(s) {
+                if (typeof s !== "string") return null;
+                let t = s.trim();
+                const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+                if (fence) t = fence[1].trim();
+                const a = t.indexOf("{");
+                const b = t.lastIndexOf("}");
+                if (a >= 0 && b > a) t = t.slice(a, b + 1);
+                try { return JSON.parse(t); } catch (e) { return null; }
+            },
+
+            // 让 AI 围绕某课生成新题；清洗校验后返回 [jp,romaji,prompt,opts,ans] 数组；失败抛出
+            async generateQuestions(lesson) {
+                const sys = `你是日语 A1 题库生成器。只输出一个 JSON 对象，格式严格为：
+{"questions":[{"jp":字符串(日文词/句),"romaji":字符串(罗马音),"prompt":字符串(用中文提问含义或用法),"options":[4个互不相同的字符串(中文候选)],"answer":整数(正确项下标0-3)}]}
+共生成 5 题，围绕主题「${lesson.title}」（${lesson.sub}）。prompt 用中文，options 为4个中文候选且互不相同，answer 为正确选项下标(0-3)。不要任何解释文字。`;
+                const raw = await this.callAI(
+                    [{ role: "system", content: sys }, { role: "user", content: "生成题目" }],
+                    { json: true, temperature: 0.85 }
+                );
+                const obj = this.parseJSONSafe(raw);
+                const arr = obj && (obj.questions || obj);
+                if (!Array.isArray(arr) || !arr.length) throw new Error("返回格式不符");
+                const qs = [];
+                for (const it of arr.slice(0, 5)) {
+                    if (!it || !it.jp || !Array.isArray(it.options) || it.options.length !== 4) continue;
+                    const opts = it.options.map(o => String(o).trim()).filter(Boolean);
+                    if (opts.length !== 4) continue;
+                    if (new Set(opts).size !== 4) continue; // 去重检查
+                    let ans = Number(it.answer);
+                    if (!Number.isInteger(ans) || ans < 0 || ans > 3) ans = 0;
+                    qs.push([String(it.jp), String(it.romaji || ""), String(it.prompt || it.jp), opts, ans]);
+                }
+                if (qs.length < 3) throw new Error("有效题数不足 (" + qs.length + ")");
+                return qs;
             },
 
             // 兼容 OpenAI 格式的 chat completion 调用
